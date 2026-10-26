@@ -46,6 +46,21 @@ python3 -I walkthrough.py --url http://127.0.0.1:18166/php-version.php
 adjust `POC_DIR` if you put it somewhere else. It only runs against
 `127.0.0.1`/`localhost`, by design.
 
+## Installing just the skill
+
+If you don't want the lab/walkthrough files, only the skill:
+
+```bash
+./install-skill.sh                      # -> ~/.claude/skills/ (every project, this user)
+./install-skill.sh --project /path/to/your/project   # that project only
+./install-skill.sh --symlink            # symlink instead of copy, stays in sync with this repo
+./install-skill.sh --uninstall          # remove it
+```
+
+Cloning this whole repo and opening it in Claude Code also works without
+running anything - project-scoped skills under `.claude/skills/` are picked
+up automatically.
+
 ## The verify-exploit-poc skill
 
 See [`.claude/skills/verify-exploit-poc/SKILL.md`](.claude/skills/verify-exploit-poc/SKILL.md)
