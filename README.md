@@ -13,38 +13,55 @@ replays addresses the author happened to capture once in their own container.
 
 | Path | What it is |
 |---|---|
-| `lab/` | A disposable Docker lab: Alpine PHP 8.4.26 behind nginx, calibrated to match a specific CTF PoC's target. `up.sh` / `down.sh` / `restart-php.sh`. |
+| `lab/stealmybitcoin/` | Disposable Docker lab: Alpine PHP 8.4.26 CLI server behind nginx, matching the CTF PoC below. |
+| `lab/apache-modphp/` | Disposable Docker lab: official `php:8.4.26-apache` image, single prefork worker, matching the mod_php build the `php2shell-kit` example chain targets. |
 | `walkthrough.py` | A narrated wrapper around that PoC - imports its real functions (unmodified) and prints out what each stage is doing: the memory-exhaustion request, the leaked addresses, the forged structure's hex dump, the final response. Built for learning the exploit, not just running it. |
 | `.claude/skills/verify-exploit-poc/` | A Claude Code skill: given a PoC + a lab that reproduces its target, drives a static scan, a dynamic cross-restart address comparison, and (where the PoC's code allows it) a corruption test, to tell a genuine live exploit from a dummy one that hardcodes ASLR addresses. |
 
-## The lab
+## The labs
+
+Two targets, because the two example PoCs below need different server
+shapes - a multi-worker PHP CLI server vs. a single-worker Apache mod_php
+process - and the skill's dynamic check depends on restarting the right
+thing for each.
+
+**`lab/stealmybitcoin/`** - Alpine PHP 8.4.26 CLI server behind nginx:
 
 ```bash
-sh lab/up.sh              # bring up the Alpine PHP 8.4.26 + nginx lab on 127.0.0.1:18166
-sh lab/restart-php.sh     # recreate just the PHP container (it segfaults after a successful run)
-sh lab/down.sh            # tear everything down
+sh lab/stealmybitcoin/up.sh              # -> 127.0.0.1:18166
+sh lab/stealmybitcoin/restart-php.sh     # recreate just the PHP container (it segfaults after a successful run)
+sh lab/stealmybitcoin/down.sh            # tear everything down
 ```
 
-`lab/up.sh` builds the lab from three small files it writes under `lab/public/`,
-`lab/print-flag`, `lab/nginx.conf` - nothing in the lab itself depends on the
-PoC it was calibrated against, so it's reusable as a template for other PHP
-8.4.26/Alpine targets.
+**`lab/apache-modphp/`** - official `php:8.4.26-apache`, one prefork worker:
+
+```bash
+sh lab/apache-modphp/up.sh               # -> 127.0.0.1:18167
+sh lab/apache-modphp/restart.sh          # fully recreate (needed between independent runs - see the script's own comment on why)
+sh lab/apache-modphp/down.sh
+```
+
+Neither lab depends on the PoC it happens to be calibrated for beyond the PHP
+build and worker count - reusable as a template for other PHP 8.4.26 targets
+of the same shape.
 
 ## Running the walkthrough
 
-The PoC this was built against is
+The PoC `walkthrough.py` narrates is
 [KillaBoi/StealMyBitcoin-PoC](https://github.com/KillaBoi/StealMyBitcoin-PoC)
 (not vendored here - it's someone else's repo with no license file). Clone it
-yourself next to this project:
+next to this project and point `lab/stealmybitcoin/` at it:
 
 ```bash
 git clone https://github.com/KillaBoi/StealMyBitcoin-PoC
+sh lab/stealmybitcoin/up.sh
 python3 -I walkthrough.py --url http://127.0.0.1:18166/php-version.php
 ```
 
-`walkthrough.py` hard-codes the path to that clone at the top of the file -
-adjust `POC_DIR` if you put it somewhere else. It only runs against
-`127.0.0.1`/`localhost`, by design.
+By default `walkthrough.py` looks for that clone as a sibling directory next
+to itself; pass `--poc-dir /path/to/clone` or set `$STEALMYBITCOIN_POC_DIR` if
+you put it somewhere else. It only runs against `127.0.0.1`/`localhost`, by
+design.
 
 ## Installing just the skill
 
@@ -82,15 +99,21 @@ the one container image the author measured it against. The skill drives:
    address and checks whether it still reports success.
 
 `references/worked-example.md` walks through all three checks against
-`StealMyBitcoin-PoC` + `lab/`, including the single biggest pitfall
-(comparing addresses across requests to a container that never actually
-restarted gives a false "identical" result - worker processes keep their
-ASLR base for as long as they stay alive).
+`StealMyBitcoin-PoC` + `lab/stealmybitcoin/`, including the single biggest
+pitfall (comparing addresses across requests to a container that never
+actually restarted gives a false "identical" result - worker processes keep
+their ASLR base for as long as they stay alive).
 
 The skill was also run, as a second test case, against
 [kaaangumus/php2shell-kit](https://github.com/kaaangumus/php2shell-kit) (a
-wrapper around [9bie/php2shell-bypass-aslr-exp](https://github.com/9bie/php2shell-bypass-aslr-exp)) -
-neither is vendored here for the same licensing reason as above.
+wrapper around [9bie/php2shell-bypass-aslr-exp](https://github.com/9bie/php2shell-bypass-aslr-exp))
+using `lab/apache-modphp/` - neither is vendored here for the same licensing
+reason as above. That run came back static-clean and dynamically genuine
+(one live RCE, with real heap corruption logged on every attempt) but with
+low reproducibility on this host, due to the single-worker race being far
+less forgiving than the CLI server's four-worker one - a good example of the
+"inconclusive on repeatability, not a dummy" verdict the skill is built to
+report honestly rather than round off in either direction.
 
 ## Using the skill on your own PoC
 

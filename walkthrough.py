@@ -17,14 +17,16 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import secrets
 import struct
 import sys
 from pathlib import Path
 
-POC_DIR = Path("/home/sai/Desktop/php2shell/StealMyBitcoin-PoC")
-sys.path.insert(0, str(POC_DIR))
-import stealmybitcoin_poc as poc  # noqa: E402
+# Defaults to a sibling checkout (clone KillaBoi/StealMyBitcoin-PoC next to
+# this file - see README). Override with --poc-dir or $STEALMYBITCOIN_POC_DIR
+# if you put it somewhere else.
+DEFAULT_POC_DIR = Path(__file__).resolve().parent / "StealMyBitcoin-PoC"
 
 
 def banner(title: str) -> None:
@@ -188,7 +190,21 @@ def main() -> int:
                          help="Loopback lab version endpoint, e.g. "
                               "http://127.0.0.1:18166/php-version.php")
     parser.add_argument("--output-dir", type=Path, default=None)
+    parser.add_argument("--poc-dir", type=Path,
+                         default=Path(os.environ.get("STEALMYBITCOIN_POC_DIR",
+                                                       str(DEFAULT_POC_DIR))),
+                         help="Path to a KillaBoi/StealMyBitcoin-PoC checkout "
+                              f"(default: {DEFAULT_POC_DIR})")
     args = parser.parse_args()
+
+    if not (args.poc_dir / "stealmybitcoin_poc.py").is_file():
+        print(f"[abort] {args.poc_dir} has no stealmybitcoin_poc.py - clone "
+              "https://github.com/KillaBoi/StealMyBitcoin-PoC there, or pass "
+              "--poc-dir / set $STEALMYBITCOIN_POC_DIR.", file=sys.stderr)
+        return 1
+    sys.path.insert(0, str(args.poc_dir))
+    global poc
+    import stealmybitcoin_poc as poc
 
     target = poc.parse_target(args.url)
     if target.host not in ("127.0.0.1", "localhost"):
